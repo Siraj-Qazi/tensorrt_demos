@@ -34,7 +34,7 @@ def parse_args():
         '-c', '--category_num', type=int, default=80,
         help='number of object categories [80]')
     parser.add_argument(
-        '-i', '--test-images', type=str, default='/home/siraj/devstuff/YOLOv3-Torch2TRT/data/custom/test/images',
+        '-i', '--test-images', type=str, default='test/images',
         help='Test images')
     parser.add_argument(
         '-m', '--model', type=str, required=True,
@@ -63,6 +63,11 @@ def loop_and_detect_images(trt_yolo, conf_th, vis, test_imgs):
 
     fps = 0.0
     tic = time.time()
+    time_start = tic
+
+    import os
+    if not os.path.exists('detections'):
+        os.mkdir('detections')
     
     for test_img in test_imgs:
         img = cv2.imread(test_img)
@@ -77,9 +82,12 @@ def loop_and_detect_images(trt_yolo, conf_th, vis, test_imgs):
         # calculate an exponentially decaying average of fps number
         fps = curr_fps if fps == 0.0 else (fps*0.95 + curr_fps*0.05)
         tic = toc
-        print('Saving ',test_img[:-4]+'-detected.jpg')
-        cv2.imwrite(test_img[:-4]+'-detected.jpg',img)
+        output_img_name = 'detections/'+os.path.basename(test_img)
+        print('Saving ',output_img_name)
+        cv2.imwrite(output_img_name,img)
         
+    total_time = time.time() - time_start
+    print('Processing speed (incl. File I/O): {} FPS'.format(len(test_imgs)/total_time))
 
 def loop_and_detect(cam, trt_yolo, conf_th, vis):
     """Continuously capture images from camera and do object detection.
