@@ -17,6 +17,7 @@ from utils.camera import add_camera_args, Camera
 from utils.display import open_window, set_display, show_fps
 from utils.visualization import BBoxVisualization
 from utils.yolo_with_plugins import get_input_shape, TrtYOLO
+import glob
 
 
 WINDOW_NAME = 'TrtYOLODemo'
@@ -33,6 +34,9 @@ def parse_args():
         '-c', '--category_num', type=int, default=80,
         help='number of object categories [80]')
     parser.add_argument(
+        '-i', '--test-images', type=str, default='/home/siraj/devstuff/YOLOv3-Torch2TRT/data/custom/test/images',
+        help='Test images')
+    parser.add_argument(
         '-m', '--model', type=str, required=True,
         help=('[yolov3|yolov3-tiny|yolov3-spp|yolov4|yolov4-tiny]-'
               '[{dimension}], where dimension could be a single '
@@ -43,6 +47,39 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
+def loop_and_detect_images(trt_yolo, conf_th, vis, test_imgs):
+    """Continuously capture images from camera and do object detection.
+
+    # Arguments
+      cam: the camera instance (video source).
+      trt_yolo: the TRT YOLO object detector instance.
+      conf_th: confidence/score threshold for object detection.
+      vis: for visualization.
+    """
+
+    
+    test_imgs = glob.glob(test_imgs+'/*.jpg')
+
+    fps = 0.0
+    tic = time.time()
+    
+    for test_img in test_imgs:
+        img = cv2.imread(test_img)
+        if img is None:
+            break
+
+        boxes, confs, clss = trt_yolo.detect(img, conf_th)
+        img = vis.draw_bboxes(img, boxes, confs, clss)
+        img = show_fps(img, fps)
+        toc = time.time()
+        curr_fps = 1.0 / (toc - tic)
+        # calculate an exponentially decaying average of fps number
+        fps = curr_fps if fps == 0.0 else (fps*0.95 + curr_fps*0.05)
+        tic = toc
+        print('Saving ',test_img[:-4]+'-detected.jpg')
+        cv2.imwrite(test_img[:-4]+'-detected.jpg',img)
+        
 
 def loop_and_detect(cam, trt_yolo, conf_th, vis):
     """Continuously capture images from camera and do object detection.
@@ -59,9 +96,9 @@ def loop_and_detect(cam, trt_yolo, conf_th, vis):
     while True:
         if cv2.getWindowProperty(WINDOW_NAME, 0) < 0:
             break
+
         img = cam.read()
-        if img is None:
-            break
+        
         boxes, confs, clss = trt_yolo.detect(img, conf_th)
         img = vis.draw_bboxes(img, boxes, confs, clss)
         img = show_fps(img, fps)
@@ -86,22 +123,27 @@ def main():
     if not os.path.isfile('yolo/%s.trt' % args.model):
         raise SystemExit('ERROR: file (yolo/%s.trt) not found!' % args.model)
 
-    cam = Camera(args)
-    if not cam.isOpened():
-        raise SystemExit('ERROR: failed to open camera!')
-
     cls_dict = get_cls_dict(args.category_num)
     vis = BBoxVisualization(cls_dict)
     h, w = get_input_shape(args.model)
     trt_yolo = TrtYOLO(args.model, (h, w), args.category_num, args.letter_box)
 
-    open_window(
-        WINDOW_NAME, 'Camera TensorRT YOLO Demo',
-        cam.img_width, cam.img_height)
-    loop_and_detect(cam, trt_yolo, conf_th=0.3, vis=vis)
+    if args.test_images:
+        loop_and_detect_images(trt_yolo, conf_th=0.5, vis=vis, test_imgs=args.test_images)
+    else:
+        cam = Camera(args)
+        if not cam.isOpened():
+            raise SystemExit('ERROR: failed to open camera!')
 
-    cam.release()
-    cv2.destroyAllWindows()
+        open_window(
+                WINDOW_NAME, 'Camera TensorRT YOLO Demo',
+                cam.img_width, cam.img_height)
+
+        loop_and_detect(cam, trt_yolo, conf_th=0.5, vis=vis)
+        cam.release()
+        cv2.destroyAllWindows()
+
+    
 
 
 if __name__ == '__main__':
