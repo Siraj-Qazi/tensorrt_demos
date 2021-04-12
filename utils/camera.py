@@ -41,6 +41,8 @@ def add_camera_args(parser):
                         help='GStreamer string [None]')
     parser.add_argument('--onboard', type=int, default=None,
                         help='Jetson onboard camera [None]')
+    parser.add_argument('--webcam', default=False,
+                        help='Laptop Webcam')
     parser.add_argument('--copy_frame', action='store_true',
                         help=('copy video frame internally [False]'))
     parser.add_argument('--do_resize', action='store_true',
@@ -123,6 +125,8 @@ def open_cam_onboard(width, height):
         raise RuntimeError('onboard camera source not found!')
     return cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
 
+def open_laptop_camera():
+    return cv2.VideoCapture(0)
 
 def grab_img(cam):
     """This 'grab_img' function is designed to be run in the sub-thread.
@@ -181,6 +185,10 @@ class Camera():
             logging.info('Camera: using a video file %s' % a.video)
             self.video_file = a.video
             self.cap = cv2.VideoCapture(a.video)
+            self._start()
+        elif a.webcam:
+            logging.info('Camera: using a webcam')
+            self.cap = open_laptop_camera()
             self._start()
         elif a.rtsp:
             logging.info('Camera: using RTSP stream %s' % a.rtsp)
